@@ -1,0 +1,44 @@
+name: Kubewarden upgrade tests
+
+on:
+  workflow_call:
+
+jobs:
+  test-kubewarden-upgrade:
+    name: "Kubewarden upgrade tests"
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Download end-to-end tests files"
+        uses: actions/checkout@v2
+        with:
+          repository: "${{ github.repository_owner }}/kubewarden-end-to-end-tests"
+          ref: "upgradetests"
+          path: "e2e-tests"
+      - name: "Setup bats testing framework"
+        uses: mig4/setup-bats@v1.2.0
+        with:
+          bats-version: 1.5.0
+      - name: "Create kubernetes cluster with kubewarden installed"
+        uses: jvanz/setup-kubewarden-cluster-action@upgradetests
+        with:
+          controller-image-repository: "ghcr.io/kubewarden/kubewarden-controller"
+          controller-image-tag: "v0.4.0"
+          policy-server-repository: "ghcr.io/kubewarden/policy-server"
+          policy-server-tag: "latest"
+      - name: "Run basic end-to-end tests"
+        run: |
+          make --directory e2e-tests runall
+        shell: bash
+      - name: "Upgrade Kubewarden controller"
+        uses: jvanz/setup-kubewarden-cluster-action@upgradetests
+        with:
+          command: "upgrade"
+          controller-image-repository: "ghcr.io/kubewarden/kubewarden-controller"
+          controller-image-tag: "v0.4.1"
+          policy-server-repository: "ghcr.io/kubewarden/policy-server"
+          policy-server-tag: "latest"
+      - name: "Checks if the pods and policies are ready after the upgrade"
+        shell: bash
+        run: |
+          kubectl wait --for=condition=Ready -n kubewarden pod --all
+          kubectl wait --for=condition=PolicyActive clusteradmissionpolicies --all
